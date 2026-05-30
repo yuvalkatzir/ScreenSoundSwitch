@@ -1,4 +1,4 @@
-﻿using Serilog;
+using Serilog;
 using SoundSwitch.Audio.Manager.Interop.Com.Threading;
 using SoundSwitch.Audio.Manager.Interop.Com.User;
 using System;
@@ -7,35 +7,17 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using static SoundSwitch.Audio.Manager.Interop.Com.User.User32.NativeMethods;
+
 namespace SoundSwitch.Audio.Manager
 {
     public class WindowMonitor
     {
         public class Event : EventArgs
         {
-            /// <summary>
-            /// ID of the process that is now active
-            /// </summary>
             public uint ProcessId { get; }
-
-            /// <summary>
-            /// Name of the process that is active
-            /// </summary>
             public string ProcessName { get; }
-
-            /// <summary>
-            /// Name of the active window
-            /// </summary>
             public string WindowName { get; }
-
-            /// <summary>
-            /// Class of the window
-            /// </summary>
             public string WindowClass { get; }
-
-            /// <summary>
-            /// Handle of the window
-            /// </summary>
             public User32.NativeMethods.HWND Hwnd { get; }
 
             public Event(uint processId, string processName, string windowName, string windowClass, User32.NativeMethods.HWND hwnd)
@@ -47,25 +29,20 @@ namespace SoundSwitch.Audio.Manager
                 Hwnd = hwnd;
             }
 
-            public override string ToString()
-            {
-                return $"{nameof(ProcessId)}: {ProcessId}, {nameof(ProcessName)}: {ProcessName}, {nameof(WindowName)}: {WindowName}, {nameof(WindowClass)}: {WindowClass}";
-            }
+            public override string ToString() =>
+                $"{nameof(ProcessId)}: {ProcessId}, {nameof(ProcessName)}: {ProcessName}, {nameof(WindowName)}: {WindowName}, {nameof(WindowClass)}: {WindowClass}";
         }
+
         public class MouseWheelEventArgs : EventArgs
         {
             public int Delta { get; }
-            public MouseWheelEventArgs(int delta)
-            {
-                Delta = delta;
-            }
+            public MouseWheelEventArgs(int delta) { Delta = delta; }
         }
-
-
 
         public event EventHandler<Event> ForegroundChanged;
         public event EventHandler<Event> ForegroundWindowMoved;
         public event EventHandler<MouseWheelEventArgs> MouseWheelScrolled;
+
         private readonly User32.NativeMethods.WinEventDelegate _foregroundWindowChanged;
         private readonly User32.NativeMethods.WinEventDelegate _foregroundWindowMoved;
         private IntPtr _foregroundWindowMoveEndHook = IntPtr.Zero;
@@ -74,28 +51,26 @@ namespace SoundSwitch.Audio.Manager
         private User32.NativeMethods.RECT _lastForegroundWindowRect;
         private bool _hasLastForegroundWindowRect;
         private readonly User32.NativeMethods.HookProc _mouseProc;
-        private IntPtr _keyboardHookID = IntPtr.Zero;
         private IntPtr _mouseHookID = IntPtr.Zero;
         private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+
         public WindowMonitor()
         {
             _foregroundWindowChanged = (hook, type, hwnd, idObject, child, thread, time) =>
             {
-                // ignore any event not pertaining directly to the window
                 if (idObject != User32.NativeMethods.OBJID_WINDOW)
                     return;
 
-                // Ignore if this is a bogus hwnd (shouldn't happen)
                 if (hwnd == IntPtr.Zero)
                     return;
+
                 var (processId, windowText, windowClass) = ProcessWindowInformation(hwnd);
 
-                //Couldn't find the processId of the window
                 if (processId == 0) return;
 
                 if (processId == Environment.ProcessId)
                 {
-                    Log.Information("Foreground = SoundSwitch, don't save.");
+                    Log.Information("Foreground window is this app, skipping.");
                     return;
                 }
 
@@ -112,22 +87,21 @@ namespace SoundSwitch.Audio.Manager
                         var processName = process.MainModule?.FileName ?? "N/A";
                         ForegroundChanged?.Invoke(this, new Event(processId, processName, windowText, windowClass, hwnd));
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        //Ignored 
+                        Log.Warning(ex, "Failed to raise ForegroundChanged for pid={ProcessId}", processId);
                     }
                 }, _cancellationTokenSource.Token);
             };
+
             _foregroundWindowMoved = (hook, type, hwnd, idObject, child, thread, time) =>
             {
-                // Ignore any event not pertaining directly to the window
                 if (idObject != User32.NativeMethods.OBJID_WINDOW)
                     return;
 
                 if (child != User32.NativeMethods.CHILDID_SELF)
                     return;
 
-                // Ignore if this is a bogus hwnd (shouldn't happen)
                 if (hwnd == IntPtr.Zero)
                     return;
 
@@ -138,19 +112,13 @@ namespace SoundSwitch.Audio.Manager
                 if (type == User32.NativeMethods.EVENT_OBJECT_LOCATIONCHANGE)
                 {
                     if (_foregroundWindow == User32.NativeMethods.HWND.NULL)
-                    {
                         _foregroundWindow = GetRootWindow(User32.NativeMethods.GetForegroundWindow());
-                    }
 
                     if (rootWindow != _foregroundWindow)
-                    {
                         return;
-                    }
 
                     if (!HasRootWindowRectChanged(rootWindow))
-                    {
                         return;
-                    }
                 }
                 else
                 {
@@ -159,12 +127,11 @@ namespace SoundSwitch.Audio.Manager
 
                 var (processId, windowText, windowClass) = ProcessWindowInformation(rootWindow);
 
-                // Couldn't find the processId of the window
                 if (processId == 0) return;
 
                 if (processId == Environment.ProcessId)
                 {
-                    Log.Information("Window moved = SoundSwitch, don't save.");
+                    Log.Information("Moved window is this app, skipping.");
                     return;
                 }
 
@@ -179,41 +146,37 @@ namespace SoundSwitch.Audio.Manager
                         var processName = process.MainModule?.FileName ?? "N/A";
                         ForegroundWindowMoved?.Invoke(this, new Event(processId, processName, windowText, windowClass, rootWindow));
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
-                        // Ignored
+                        Log.Warning(ex, "Failed to raise ForegroundWindowMoved for pid={ProcessId}", processId);
                     }
                 }, _cancellationTokenSource.Token);
             };
 
-
             ComThread.Invoke(() =>
             {
-                _foregroundWindowMoveEndHook = User32.NativeMethods.SetWinEventHook(User32.NativeMethods.EVENT_SYSTEM_MOVESIZEEND,
+                _foregroundWindowMoveEndHook = User32.NativeMethods.SetWinEventHook(
                     User32.NativeMethods.EVENT_SYSTEM_MOVESIZEEND,
-                    IntPtr.Zero, _foregroundWindowMoved,
-                    0,
-                    0,
+                    User32.NativeMethods.EVENT_SYSTEM_MOVESIZEEND,
+                    IntPtr.Zero, _foregroundWindowMoved, 0, 0,
                     User32.NativeMethods.WINEVENT_OUTOFCONTEXT);
-
             });
 
             ComThread.Invoke(() =>
             {
-                User32.NativeMethods.SetWinEventHook(User32.NativeMethods.EVENT_SYSTEM_MINIMIZEEND,
+                User32.NativeMethods.SetWinEventHook(
                     User32.NativeMethods.EVENT_SYSTEM_MINIMIZEEND,
-                    IntPtr.Zero, _foregroundWindowChanged,
-                    0,
-                    0,
+                    User32.NativeMethods.EVENT_SYSTEM_MINIMIZEEND,
+                    IntPtr.Zero, _foregroundWindowChanged, 0, 0,
                     User32.NativeMethods.WINEVENT_OUTOFCONTEXT);
 
-                User32.NativeMethods.SetWinEventHook(User32.NativeMethods.EVENT_SYSTEM_FOREGROUND,
+                User32.NativeMethods.SetWinEventHook(
                     User32.NativeMethods.EVENT_SYSTEM_FOREGROUND,
-                    IntPtr.Zero, _foregroundWindowChanged,
-                    0,
-                    0,
+                    User32.NativeMethods.EVENT_SYSTEM_FOREGROUND,
+                    IntPtr.Zero, _foregroundWindowChanged, 0, 0,
                     User32.NativeMethods.WINEVENT_OUTOFCONTEXT);
             });
+
             _mouseProc = HookCallbackMouse;
             ComThread.Invoke(() =>
             {
@@ -223,11 +186,9 @@ namespace SoundSwitch.Audio.Manager
 
         private IntPtr SetHook(HookProc proc, int evenType)
         {
-            using (var curProcess = Process.GetCurrentProcess())
-            using (var curModule = curProcess.MainModule)
-            {
-                return SetWindowsHookEx(evenType, proc, GetModuleHandle(curModule.ModuleName), 0);
-            }
+            using var curProcess = Process.GetCurrentProcess();
+            using var curModule = curProcess.MainModule;
+            return SetWindowsHookEx(evenType, proc, GetModuleHandle(curModule.ModuleName), 0);
         }
 
         public void SetLocationChangeTracking(bool enabled)
@@ -237,17 +198,14 @@ namespace SoundSwitch.Audio.Manager
                 if (enabled)
                 {
                     if (_foregroundWindowLocationHook != IntPtr.Zero)
-                    {
                         return;
-                    }
 
                     _foregroundWindow = GetRootWindow(User32.NativeMethods.GetForegroundWindow());
                     UpdateLastForegroundWindowRect(_foregroundWindow);
-                    _foregroundWindowLocationHook = User32.NativeMethods.SetWinEventHook(User32.NativeMethods.EVENT_OBJECT_LOCATIONCHANGE,
+                    _foregroundWindowLocationHook = User32.NativeMethods.SetWinEventHook(
                         User32.NativeMethods.EVENT_OBJECT_LOCATIONCHANGE,
-                        IntPtr.Zero, _foregroundWindowMoved,
-                        0,
-                        0,
+                        User32.NativeMethods.EVENT_OBJECT_LOCATIONCHANGE,
+                        IntPtr.Zero, _foregroundWindowMoved, 0, 0,
                         User32.NativeMethods.WINEVENT_OUTOFCONTEXT);
                 }
                 else if (_foregroundWindowLocationHook != IntPtr.Zero)
@@ -261,9 +219,7 @@ namespace SoundSwitch.Audio.Manager
         private static User32.NativeMethods.HWND GetRootWindow(User32.NativeMethods.HWND hwnd)
         {
             if (hwnd == User32.NativeMethods.HWND.NULL)
-            {
                 return User32.NativeMethods.HWND.NULL;
-            }
 
             var rootWindow = User32.NativeMethods.GetAncestor(hwnd, User32.NativeMethods.GA_ROOT);
             return rootWindow == User32.NativeMethods.HWND.NULL ? hwnd : rootWindow;
@@ -273,14 +229,12 @@ namespace SoundSwitch.Audio.Manager
         {
             if (!User32.NativeMethods.GetWindowRect(hwnd, out var currentRect))
             {
-                // 某些窗口无法稳定获取窗口矩形，避免因此完全丢失位置变化事件。
+                // Some windows cannot reliably return a rect; return true to avoid missing position-change events.
                 return true;
             }
 
             if (_hasLastForegroundWindowRect && currentRect.Equals(_lastForegroundWindowRect))
-            {
                 return false;
-            }
 
             _lastForegroundWindowRect = currentRect;
             _hasLastForegroundWindowRect = true;
@@ -318,25 +272,20 @@ namespace SoundSwitch.Audio.Manager
                     {
                         if (_cancellationTokenSource.Token.IsCancellationRequested)
                             return;
-
                         try
                         {
                             MouseWheelScrolled?.Invoke(this, new MouseWheelEventArgs(delta));
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
-                            Debug.WriteLine("MouseWheelScrolled event handler threw an exception");
+                            Log.Warning(ex, "MouseWheelScrolled handler threw an exception");
                         }
                     }, _cancellationTokenSource.Token);
-
                 }
             }
             return CallNextHookEx(_mouseHookID, nCode, wParam, lParam);
         }
-        private static bool IsKeyPressed(int key)
-        {
-            return (User32.NativeMethods.GetAsyncKeyState(key) & 0x8000) != 0;
-        }
+
         public static (uint ProcessId, string WindowText, string WindowClass) ProcessWindowInformation(User32.NativeMethods.HWND hwnd)
         {
             return ComThread.Invoke(() =>
@@ -344,45 +293,16 @@ namespace SoundSwitch.Audio.Manager
                 uint processId = 0;
                 var wndText = "";
                 var wndClass = "";
-                try
-                {
-                    wndText = User32.GetWindowText(hwnd);
-                }
-                catch (Exception)
-                {
-                    // ignored
-                }
-
-                try
-                {
-                    wndClass = User32.GetWindowClass(hwnd);
-                }
-                catch (Exception)
-                {
-                    // ignored
-                }
-
-                try
-                {
-                    User32.NativeMethods.GetWindowThreadProcessId(hwnd, out processId);
-                }
-                catch (Exception)
-                {
-                    // ignored
-                }
-
-
+                try { wndText = User32.GetWindowText(hwnd); } catch (Exception ex) { Log.Warning(ex, "Failed to get window text"); }
+                try { wndClass = User32.GetWindowClass(hwnd); } catch (Exception ex) { Log.Warning(ex, "Failed to get window class"); }
+                try { User32.NativeMethods.GetWindowThreadProcessId(hwnd, out processId); } catch (Exception ex) { Log.Warning(ex, "Failed to get window thread process id"); }
                 return (processId, wndText, wndClass);
             });
-
         }
+
         public void Stop()
         {
-            // 请求取消所有正在运行的任务
-            if (_cancellationTokenSource != null)
-            {
-                _cancellationTokenSource.Cancel();
-            }
+            _cancellationTokenSource?.Cancel();
 
             ComThread.Invoke(() =>
             {
@@ -400,10 +320,6 @@ namespace SoundSwitch.Audio.Manager
             });
         }
 
-        public void Dispose()
-        {
-            Stop(); // 调用 Stop 方法清理资源
-        }
+        public void Dispose() => Stop();
     }
-
 }

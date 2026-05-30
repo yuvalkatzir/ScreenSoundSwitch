@@ -1,27 +1,27 @@
-# UI 优化代办清单
+# UI Improvement Checklist
 
-## 1. 交互一致性（已推进）
-- [x] 在显示器设备选择页面增加统一状态提示（InfoBar）
-- [x] 未选择显示器时禁用“播放设备下拉框”
-- [x] 绑定成功/失败时给出可见状态消息
-- [x] 统一其他页面（音量页、设置页、播放页）的状态提示风格
+## 1. Interaction Consistency (in progress)
+- [x] Add a unified status bar (InfoBar) on the display/device selection page
+- [x] Disable the playback device dropdown when no display is selected
+- [x] Show visible status messages on binding success/failure
+- [x] Unify status bar style across all pages (volume, settings, playback)
 
-## 2. 布局与视觉层级
-- [ ] 统一页面间距与卡片样式（Spacing / Padding / Border）
-- [ ] 移除硬编码颜色，统一 ThemeResource
-- [ ] 补充暗色主题下的可读性校验
+## 2. Layout and Visual Hierarchy
+- [ ] Unify page spacing and card styles (Spacing/Padding/Border)
+- [ ] Remove hardcoded colors, use ThemeResource throughout
+- [ ] Verify readability in dark theme
 
-## 3. 可用性提升
-- [ ] 增加会话列表搜索/过滤
-- [ ] 显示器卡片增加主屏标识与当前绑定设备摘要
-- [ ] 异常场景增加引导提示（例如无会话、无设备）
+## 3. Usability Improvements
+- [ ] Add session list search/filter
+- [ ] Show primary-screen badge and current bound device summary on monitor cards
+- [ ] Add guidance messages for empty states (no sessions, no devices)
 
-## 4. 稳定性与性能
-- [ ] 高频事件触发时增加节流（窗口移动、会话刷新）
-- [ ] 校验控件卸载时事件解绑完整性
-- [ ] 大量会话场景下评估列表虚拟化
+## 4. Stability and Performance
+- [ ] Throttle high-frequency events (window move, session refresh)
+- [ ] Verify complete event unsubscription on control unload
+- [ ] Evaluate list virtualization for large numbers of sessions
 
-## 5. 设置体验
-- [ ] 增加首次启动引导（先绑定显示器设备）
-- [ ] 开机自启、托盘、配置恢复入口集中到设置页
-- [ ] 增加“重置全部绑定”与“导入导出配置”
+## 5. Settings Experience
+- [ ] Add first-launch onboarding (bind display to device first)
+- [ ] Consolidate auto-start, tray, and config-restore toggles into the settings page
+- [ ] Add “reset all bindings” and “import/export config”

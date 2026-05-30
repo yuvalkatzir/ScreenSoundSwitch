@@ -1,6 +1,5 @@
-﻿using NAudio.CoreAudioApi;
+using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
-using System;
 using System.Diagnostics;
 
 namespace ScreenSoundSwitch.WinUI.Audio
@@ -9,32 +8,32 @@ namespace ScreenSoundSwitch.WinUI.Audio
     {
         public void OnDeviceStateChanged(string deviceId, uint newState)
         {
-            Console.WriteLine($"Device state changed: {deviceId}, New state: {newState}");
+            Trace.TraceInformation($"Device state changed: {deviceId}, new state: {newState}");
         }
 
         public void OnDeviceAdded(string pwstrDeviceId)
         {
-            Console.WriteLine($"Device added: {pwstrDeviceId}");
+            Trace.TraceInformation($"Device added: {pwstrDeviceId}");
         }
 
         public void OnDeviceRemoved(string deviceId)
         {
-            Console.WriteLine($"Device removed: {deviceId}");
+            Trace.TraceInformation($"Device removed: {deviceId}");
         }
 
         public void OnDefaultDeviceChanged(DataFlow flow, Role role, string pwstrDefaultDeviceId)
         {
-            Console.WriteLine($"Default device changed: {pwstrDefaultDeviceId}, Flow: {flow}, Role: {role}");
+            Trace.TraceInformation($"Default device changed: {pwstrDefaultDeviceId}, flow: {flow}, role: {role}");
         }
 
         public void OnPropertyValueChanged(string pwstrDeviceId, PropertyKey key)
         {
-            Console.WriteLine($"Property value changed: {pwstrDeviceId}");
+            Trace.TraceInformation($"Property value changed: {pwstrDeviceId}");
         }
 
         public void OnDeviceStateChanged(string deviceId, DeviceState newState)
         {
-            Debug.WriteLine("test");
+            Trace.TraceInformation($"Device state changed: {deviceId}, new state: {newState}");
         }
     }
 }

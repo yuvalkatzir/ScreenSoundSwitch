@@ -10,12 +10,9 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using UserControl = Microsoft.UI.Xaml.Controls.UserControl;
-
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
 
 namespace ScreenSoundSwitch.WinUI.Views
 {
@@ -38,31 +35,43 @@ namespace ScreenSoundSwitch.WinUI.Views
             this.PointerEntered += ProcessControl_PointerEntered;
             this.PointerExited += ProcessControl_PointerExited;
         }
-        public int ProcessId
-        {
-            get { return process.Id; }
-        }
-        /// <summary>
-        /// 该进程控件对应的进程所处的屏幕是否发生改变，如发生改变则更新screen属性
-        /// </summary>
-        /// <param name="screen"></param>
-        /// <returns>screen==this.screen -> false</returns>
+
+        public int ProcessId => process.Id;
+
         public bool IsScreenChange(Screen screen)
         {
-            if (this.screen.Equals(screen))
-            {
+            if (this.screen != null && this.screen.DeviceName == screen.DeviceName)
                 return false;
-            }
+
             this.screen = screen;
             return true;
         }
+
         public void ChangeSimpleVolumeLevel(float level)
         {
             session.SimpleAudioVolume.Volume += level;
         }
+
         public void ChangeAudioDevice(MMDevice mMDevice)
         {
-            audioSwitcher.SwitchProcessTo(mMDevice.ID, ERole.ERole_enum_count, EDataFlow.eRender, (uint)ProcessId);//ERole_enum_count，将该设备分配所有角色任务
+            audioSwitcher.SwitchProcessTo(mMDevice.ID, ERole.ERole_enum_count, EDataFlow.eRender, (uint)ProcessId);
+
+            // Brief mute/unmute forces stubborn apps to rebuild their audio stream on the new endpoint.
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(150);
+                    var currentVolume = session.SimpleAudioVolume.Volume;
+                    session.SimpleAudioVolume.Volume = 0f;
+                    await Task.Delay(50);
+                    session.SimpleAudioVolume.Volume = currentVolume;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Pause/resume cycle failed for pid={ProcessId}: {ex.Message}");
+                }
+            });
         }
 
         public void ApplyScreenPositionChannelBalance(Screen targetScreen, MMDevice targetDevice, IntPtr hwnd)
@@ -95,28 +104,21 @@ namespace ScreenSoundSwitch.WinUI.Views
                 return;
             }
 
-            // Microsoft docs (GetWindowRect/RECT): left/top/right/bottom are edges in screen coordinates,
-            // right/bottom are exclusive. Use edge + width/2 to get center X.
             var centerX = windowRect.Left + ((windowRect.Right - windowRect.Left) / 2.0);
-
-            var normalized = (centerX - minX) / width; // 0..1
-            normalized = Math.Max(0.0, Math.Min(1.0, normalized));
+            var normalized = Math.Max(0.0, Math.Min(1.0, (centerX - minX) / width));
 
             var localSettings = Windows.Storage.ApplicationData.Current.LocalSettings;
             var strength = 20.0;
             if (localSettings.Values["ScreenPositionChannelBalanceStrength"] != null)
-            {
                 strength = Convert.ToDouble(localSettings.Values["ScreenPositionChannelBalanceStrength"]);
-            }
 
-            // 以 50 为基准，窗口越靠左提高左声道，越靠右提高右声道。
-            var bias = (normalized - 0.5) * 2.0; // -1..1
+            var bias = (normalized - 0.5) * 2.0;
             var left = Clamp(50.0 - bias * strength);
             var right = Clamp(50.0 + bias * strength);
 
             if (targetDevice.AudioEndpointVolume.Channels.Count < 2)
             {
-                DebugLogStore.Add($"Skip channel balance for process {ProcessId}: device {targetDevice.FriendlyName} has less than 2 channels.");
+                DebugLogStore.Add($"Skip channel balance for process {ProcessId}: device {targetDevice.FriendlyName} has fewer than 2 channels.");
                 return;
             }
 
@@ -144,37 +146,28 @@ namespace ScreenSoundSwitch.WinUI.Views
             {
                 var icon = Icon.ExtractAssociatedIcon(process.MainModule?.FileName);
                 if (icon != null)
-                {
-                    // 将Icon转换为BitmapImage
-                    BitmapImage bitmapImage = ConvertIconToBitmapImage(icon);
-                    viewModel.SetImage(bitmapImage);
-                }
+                    viewModel.SetImage(ConvertIconToBitmapImage(icon));
             }
             catch (System.ComponentModel.Win32Exception)
             {
-                // Fallback for when a 32-bit process tries to access a 64-bit process module
-                // Ignore the exception, the process will just not have an icon
+                // 32-bit process cannot access a 64-bit process module; icon will be missing.
             }
         }
+
         private BitmapImage ConvertIconToBitmapImage(Icon icon)
         {
-            using (var stream = new MemoryStream())
-            {
-                icon.ToBitmap().Save(stream, System.Drawing.Imaging.ImageFormat.Png);
-                stream.Seek(0, SeekOrigin.Begin);
+            using var stream = new MemoryStream();
+            icon.ToBitmap().Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+            stream.Seek(0, SeekOrigin.Begin);
 
-                BitmapImage bitmapImage = new BitmapImage();
-                bitmapImage.SetSource(stream.AsRandomAccessStream());
-                return bitmapImage;
-            }
+            var bitmapImage = new BitmapImage();
+            bitmapImage.SetSource(stream.AsRandomAccessStream());
+            return bitmapImage;
         }
 
         private void SimpleVolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            if (sliderLock)
-            {
-                return;
-            }
+            if (sliderLock) return;
             session.SimpleAudioVolume.Volume = (float)(e.NewValue / 100);
         }
 
@@ -182,18 +175,14 @@ namespace ScreenSoundSwitch.WinUI.Views
         {
             var border = this.FindName("ProcessRowBorder") as Microsoft.UI.Xaml.Controls.Border;
             if (border != null)
-            {
                 border.Background = (Microsoft.UI.Xaml.Media.Brush)App.Current.Resources["SubtleFillColorSecondaryBrush"];
-            }
         }
 
         private void ProcessControl_PointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             var border = this.FindName("ProcessRowBorder") as Microsoft.UI.Xaml.Controls.Border;
             if (border != null)
-            {
                 border.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
-            }
         }
     }
 }
