@@ -84,7 +84,7 @@ namespace SoundSwitch.Audio.Manager
                     try
                     {
                         var process = Process.GetProcessById((int)processId);
-                        var processName = process.MainModule?.FileName ?? "N/A";
+                        var processName = process.ProcessName;
                         ForegroundChanged?.Invoke(this, new Event(processId, processName, windowText, windowClass, hwnd));
                     }
                     catch (Exception ex)
@@ -143,7 +143,7 @@ namespace SoundSwitch.Audio.Manager
                     try
                     {
                         var process = Process.GetProcessById((int)processId);
-                        var processName = process.MainModule?.FileName ?? "N/A";
+                        var processName = process.ProcessName;
                         ForegroundWindowMoved?.Invoke(this, new Event(processId, processName, windowText, windowClass, rootWindow));
                     }
                     catch (Exception ex)
